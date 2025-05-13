@@ -2,6 +2,7 @@ from langchain_ollama import OllamaEmbeddings
 import chromadb
 import pandas as pd
 import warnings
+import re
 warnings.filterwarnings('ignore', category=pd.errors.DtypeWarning)
 
 def extract_address_metadata(input_str: str):
@@ -28,7 +29,15 @@ def extract_address_metadata(input_str: str):
     district_found = [d for d in district if d in input_str.lower()]
     mukim_found = [m for m in mukim if m in input_str.lower()]
     location_found = [l for l in location if l in input_str.lower()]  # Convert float to string
-    postcode_found = [p for p in postcode if p in input_str.lower()]
+    
+    postcode_pattern = r'\b\d{5}\b'
+    input_str_postcode = re.findall(postcode_pattern, input_str)
+    
+    if input_str_postcode:
+        postcode_found = [p for p in postcode if p in input_str_postcode[0]]
+    
+    if not input_str_postcode:
+        postcode_found = []
 
     state_update = []
     district_update = []
@@ -52,7 +61,7 @@ def extract_address_metadata(input_str: str):
     # 1)
     if len(state_found) == 1:                                                                                                                 
         state_update=state_update+(state_found)
-        state = pd.read_csv("malaysia-postcodes-location-mukim-district-state.csv")
+        state = pd.read_csv("malaysia-postcodes-location-mukim-district-state.csv",dtype='str')
         #filter state_found
         state = state[state['state'].str.lower() == state_found[0]]
         #update district_found
@@ -73,7 +82,7 @@ def extract_address_metadata(input_str: str):
                     # update mukim_found
                     mukim = district_case1[["mukim"]].dropna().drop_duplicates()['mukim'].str.lower().tolist()
                     mukim_found = [m for m in mukim if m in input_str.lower()]
-
+                    
                 ##########################################################################################################
 
                     # 4)
@@ -118,7 +127,21 @@ def extract_address_metadata(input_str: str):
                             for location in location_found:
                                 if location != district:
                                     location_update=location_update+([location])
-                
+
+                    if postcode_found:
+                        postcode_update=postcode_update+postcode_found
+                        
+                    elif not postcode_found:
+                        if location_found:
+                            #filter data up to location_found
+                            location_case1 = district_case1[district_case1['location'].str.lower() == location_found[0]]
+                            #location_found = [l for l in location if l in input_str.lower()]
+                            #location_found = [x for x in [l for l in location_case1 if l.lower() in input_str.lower()] if x in [x.strip() for x in input_str.lower().strip().split(',')]]
+
+                            # update postcode found
+                            postcode = location_case1[["postcode"]].dropna().drop_duplicates()['postcode'].str.lower().tolist()
+                            postcode_update=postcode_update+postcode
+                        
                 ##########################################################################################################
                 
                 # district name is the same as state name
@@ -377,5 +400,5 @@ def extract_address_metadata(input_str: str):
     location_update = list(set(location_update))
     postcode_update = list(set(postcode_update))
 
-    return (state_update,district_update,mukim_update,location_update,postcode_update)
+    return (state_update,district_update,mukim_update,location_update,postcode_update,mukim_found)
     #return (len(district_found))
